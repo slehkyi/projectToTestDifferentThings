@@ -7,18 +7,27 @@ import (
 	"time"
 	"fmt"
 	"io/ioutil"
+	"net"
 )
 
 var AmActive = false
-const srv1 = "http://127.0.0.1:8080/check"
-const srv2 = "http://127.0.0.1:8088/check"
+var urlCheck string
+const IP1 = "192.168.0.214"
+const IP2 = "127.0.0.1"
+const port1 = ":8080"
+const port2 = ":8088"
+const urlCheck1 = "http://"+IP1+port1+"/check"
+const urlCheck2 = "http://"+IP2+port2+"/check"
 
 func main() {
 
-	go Change(nil)
+	myIP := GetOutboundIP()
+	fmt.Println(myIP.String())
+
+	// go Change(nil)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/check", CheckHandler)
-	go http.ListenAndServe(":8080", mux)
+	go selectServer(myIP.String(), mux)
 
 	for {
 		time.Sleep(2 * time.Second)
@@ -26,8 +35,19 @@ func main() {
 	}
 }
 
+func selectServer(myIP string, mux *http.ServeMux) {
+	switch myIP {
+	case IP1:
+		http.ListenAndServe(port1, mux)
+		urlCheck = "http://"+IP2+port2+"/check"
+	case IP2:
+		http.ListenAndServe(port2, mux)
+		urlCheck = "http://"+IP1+port1+"/check"
+	}
+}
+
 func Change(mux *http.ServeMux) {
-	result, err := Check(srv2)
+	result, err := Check(urlCheck2)
 	if err != nil {
 		Active(true)
 		fmt.Println("I am Active")
@@ -85,6 +105,18 @@ func Check(url string) (responseOK, error) {
 	fmt.Println(result)
 
 	return result, nil
+}
+
+func GetOutboundIP() net.IP {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+	return localAddr.IP
 }
 
 func Active(val bool) {
